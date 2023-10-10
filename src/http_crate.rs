@@ -1,4 +1,5 @@
 use std::{
+    convert::TryFrom,
     io::{Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
@@ -162,7 +163,7 @@ impl From<Response> for http::Response<Vec<u8>> {
 /// # Ok(())
 /// # }
 /// ```
-impl core::convert::TryFrom<http::request::Builder> for Request {
+impl TryFrom<http::request::Builder> for Request {
     type Error = http::Error;
 
     fn try_from(value: http::request::Builder) -> Result<Self, Self::Error> {

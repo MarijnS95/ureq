@@ -1,6 +1,7 @@
 use http_02 as http;
 
 use std::{
+    convert::TryFrom,
     io::{Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
@@ -137,33 +138,16 @@ impl From<Response> for http::Response<Vec<u8>> {
 
 /// Converts an [`http::request::Builder`] into a [`Request`].
 ///
+/// For incomplete builders, see the [`http::request::Builder`] documentation for defaults.
+///
 /// ```
 /// # use http_02 as http;
-/// # fn main() -> Result<(), ureq::Error> {
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// # ureq::is_test(true);
+/// use std::convert::TryInto;
+///
 /// let http_request_builder = http::Request::builder().method("GET").uri("http://example.com");
-/// let request: ureq::Request = http_request_builder.into();
-/// request.call()?;
-/// # Ok(())
-/// # }
-/// ```
-///
-/// # Fallibility
-///
-/// [`http::request::Builder`] contains a [`Result`] that is normally checked when the builder
-/// is "built" into a [`http::Request`].  This [`From`] implementation does _not_ check it
-/// however, and returns a `GET` [`Request`] that defaults to `"https://example.com"` in case
-/// it contains [`Err`].  In order to test for errors, utilize the provided conversion from
-/// [`http::request::Parts`]:
-///
-/// ```
-/// # use http_02 as http;
-/// # fn main() -> Result<(), ureq::Error> {
-/// ureq::is_test(true);
-/// let http_builder = http::Request::builder().method("GET").uri("http://example.com");
-/// let request = http_builder.body(()).expect("Builder error"); // Check the error
-/// let (parts, ()) = request.into_parts();
-/// let request: ureq::Request = parts.into();
+/// let request: ureq::Request = http_request_builder.try_into()?;
 /// request.call()?;
 /// # Ok(())
 /// # }
@@ -187,27 +171,12 @@ impl From<Response> for http::Response<Vec<u8>> {
 /// # Ok(())
 /// # }
 /// ```
-impl From<http::request::Builder> for Request {
-    fn from(value: http::request::Builder) -> Self {
-        let mut new_request = crate::agent().request(
-            value.method_ref().map_or("GET", |m| m.as_str()),
-            &value
-                .uri_ref()
-                .map_or("https://example.com".to_string(), |u| u.to_string()),
-        );
+impl TryFrom<http::request::Builder> for Request {
+    type Error = http::Error;
 
-        if let Some(headers) = value.headers_ref() {
-            for (name, value) in headers {
-                let mut raw_header: Vec<u8> = name.to_string().into_bytes();
-                raw_header.extend(b": ");
-                raw_header.extend(value.as_bytes());
-                let header = HeaderLine::from(raw_header).into_header().unwrap();
-
-                crate::header::add_header(&mut new_request.headers, header)
-            }
-        }
-
-        new_request
+    fn try_from(value: http::request::Builder) -> Result<Self, Self::Error> {
+        let (parts, ()) = value.body(())?.into_parts();
+        Ok(parts.into())
     }
 }
 
